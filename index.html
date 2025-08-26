@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Steam Game Collage</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; background: #111; color: white; }
+    textarea { width: 400px; height: 200px; }
+    canvas { border: 1px solid #ccc; margin-top: 1em; background: black; }
+    button { margin: 0.5em; padding: 0.5em 1em; }
+  </style>
+</head>
+<body>
+  <h1>Steam Game Collage Generator</h1>
+  <p>Enter up to 25 Steam game titles (one per line):</p>
+  <textarea id="titles"></textarea><br>
+  <button id="generate">Generate Collage</button>
+  <button id="download">Download PNG</button>
+  <br>
+  <canvas id="collage" width="1500" height="1500"></canvas>
+
+  <script>
+    const canvas = document.getElementById("collage");
+    const ctx = canvas.getContext("2d");
+    const cols = 5;
+    const cellSize = 300;
+    const padding = 10; // padding around images
+    ctx.textAlign = "center";
+
+    async function fetchSteamCover(title) {
+      const query = encodeURIComponent(title);
+      const steamUrl = `https://store.steampowered.com/api/storesearch/?term=${query}&l=english&cc=us`;
+      const url = `https://corsproxy.io/?${encodeURIComponent(steamUrl)}`;
+      try {
+        const res = await fetch(url);
+        const data = await res.json();
+        if (data.items && data.items.length > 0) {
+          const game = data.items[0];
+          console.log("Found game:", game.name, game);
+
+          // Use header_image -> capsule -> tiny_image
+          let imageUrl = game.header_image || game.capsule || game.tiny_image;
+          if (imageUrl) {
+            imageUrl = `https://corsproxy.io/?${encodeURIComponent(imageUrl)}`;
+          }
+
+          return { name: game.name, image: imageUrl };
+        }
+      } catch (e) {
+        console.error("Fetch error:", e);
+      }
+      return null;
+    }
+
+    document.getElementById("generate").addEventListener("click", async () => {
+      // clear canvas
+      ctx.fillStyle = "black";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      const titles = document.getElementById("titles").value
+        .split("\n").map(t => t.trim()).filter(Boolean).slice(0, 25);
+
+      for (let i = 0; i < titles.length; i++) {
+        const game = await fetchSteamCover(titles[i]);
+        const x = (i % cols) * cellSize;
+        const y = Math.floor(i / cols) * cellSize;
+
+        if (game && game.image) {
+          try {
+            const img = await loadImage(game.image);
+            drawImageInCell(img, x, y, cellSize, cellSize);
+            drawTitle(game.name, x, y, cellSize, cellSize);
+          } catch (err) {
+            console.error("Image load failed:", game.image);
+            drawPlaceholder(x, y, titles[i]);
+          }
+        } else {
+          drawPlaceholder(x, y, titles[i]);
+        }
+      }
+    });
+
+    function drawImageInCell(img, x, y, width, height) {
+      // preserve aspect ratio
+      const ratio = Math.min((width - 2*padding) / img.width, (height - 40 - 2*padding) / img.height);
+      const imgWidth = img.width * ratio;
+      const imgHeight = img.height * ratio;
+      const offsetX = x + (width - imgWidth) / 2;
+      const offsetY = y + (height - 40 - imgHeight) / 2; // leave 40px for title
+      ctx.drawImage(img, offsetX, offsetY, imgWidth, imgHeight);
+    }
+
+    function drawTitle(text, x, y, width, height) {
+      ctx.fillStyle = "white";
+      ctx.font = "16px sans-serif";
+      wrapText(ctx, text, x + width/2, y + height - 30, width - 20, 18);
+    }
+
+    function wrapText(context, text, x, y, maxWidth, lineHeight) {
+      const words = text.split(' ');
+      let line = '';
+      let testLine, metrics, testWidth;
+      for (let n = 0; n < words.length; n++) {
+        testLine = line + words[n] + ' ';
+        metrics = context.measureText(testLine);
+        testWidth = metrics.width;
+        if (testWidth > maxWidth && n > 0) {
+          context.fillText(line, x, y);
+          line = words[n] + ' ';
+          y += lineHeight;
+        } else {
+          line = testLine;
+        }
+      }
+      context.fillText(line, x, y);
+    }
+
+    function drawPlaceholder(x, y, title) {
+      ctx.fillStyle = "#444";
+      ctx.fillRect(x, y, cellSize, cellSize - 40);
+      ctx.fillStyle = "red";
+      ctx.fillText("Not Found", x + cellSize/2, y + cellSize/2);
+    }
+
+    function loadImage(url) {
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.onload = () => {
+          console.log("Loaded image:", url);
+          resolve(img);
+        };
+        img.onerror = (err) => {
+          console.error("Image failed to load:", url, err);
+          reject(err);
+        };
+        img.src = url;
+      });
+    }
+
+    document.getElementById("download").addEventListener("click", () => {
+      const link = document.createElement("a");
+      link.download = "steam_collage.png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    });
+  </script>
+</body>
+</html>
