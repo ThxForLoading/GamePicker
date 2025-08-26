@@ -11,9 +11,8 @@
   </style>
 </head>
 <body>
-  <h1>Steam Game Ranking Generator</h1>
-  <p>Enter up to 25 Steam game titles, make sure to only put ONE PER LINE:</p>
-  <p>If the title doesnt show up correctly go to Steam and copy paste the game title from there!</p>
+  <h1>Steam Game Collage Generator</h1>
+  <p>Enter up to 25 Steam game titles (one per line):</p>
   <textarea id="titles"></textarea><br>
   <button id="generate">Generate Collage</button>
   <button id="download">Download PNG</button>
@@ -25,7 +24,7 @@
     const ctx = canvas.getContext("2d");
     const cols = 5;
     const cellSize = 300;
-    const padding = 10; // padding around images
+    const padding = 10;
     ctx.textAlign = "center";
 
     async function fetchSteamCover(title) {
@@ -39,7 +38,7 @@
           const game = data.items[0];
           console.log("Found game:", game.name, game);
 
-          // Use header_image -> capsule -> tiny_image
+          // fallback: header_image -> capsule -> tiny_image
           let imageUrl = game.header_image || game.capsule || game.tiny_image;
           if (imageUrl) {
             imageUrl = `https://corsproxy.io/?${encodeURIComponent(imageUrl)}`;
@@ -54,12 +53,14 @@
     }
 
     document.getElementById("generate").addEventListener("click", async () => {
-      // clear canvas
       ctx.fillStyle = "black";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      const titles = document.getElementById("titles").value
+      let titles = document.getElementById("titles").value
         .split("\n").map(t => t.trim()).filter(Boolean).slice(0, 25);
+
+      // shuffle titles for random collage
+      titles = shuffleArray(titles);
 
       for (let i = 0; i < titles.length; i++) {
         const game = await fetchSteamCover(titles[i]);
@@ -73,38 +74,35 @@
             drawTitle(game.name, x, y, cellSize, cellSize);
           } catch (err) {
             console.error("Image load failed:", game.image);
-            drawPlaceholder(x, y, titles[i]);
+            drawPlaceholder(x, y, game.name); // show game name if image fails
           }
         } else {
-          drawPlaceholder(x, y, titles[i]);
+          drawPlaceholder(x, y, titles[i]); // show input title if API returned nothing
         }
       }
     });
 
     function drawImageInCell(img, x, y, width, height) {
-      // preserve aspect ratio
       const ratio = Math.min((width - 2*padding) / img.width, (height - 40 - 2*padding) / img.height);
       const imgWidth = img.width * ratio;
       const imgHeight = img.height * ratio;
       const offsetX = x + (width - imgWidth) / 2;
-      const offsetY = y + (height - 40 - imgHeight) / 2; // leave 40px for title
+      const offsetY = y + (height - 40 - imgHeight) / 2;
       ctx.drawImage(img, offsetX, offsetY, imgWidth, imgHeight);
     }
 
     function drawTitle(text, x, y, width, height) {
       ctx.fillStyle = "white";
-      ctx.font = "32px sans-serif";
-      wrapText(ctx, text, x + width/2, y + height - 30, width - 20, 25);
+      ctx.font = "16px sans-serif";
+      wrapText(ctx, text, x + width/2, y + height - 30, width - 20, 18);
     }
 
     function wrapText(context, text, x, y, maxWidth, lineHeight) {
       const words = text.split(' ');
       let line = '';
-      let testLine, metrics, testWidth;
       for (let n = 0; n < words.length; n++) {
-        testLine = line + words[n] + ' ';
-        metrics = context.measureText(testLine);
-        testWidth = metrics.width;
+        const testLine = line + words[n] + ' ';
+        const testWidth = context.measureText(testLine).width;
         if (testWidth > maxWidth && n > 0) {
           context.fillText(line, x, y);
           line = words[n] + ' ';
@@ -119,8 +117,9 @@
     function drawPlaceholder(x, y, title) {
       ctx.fillStyle = "#444";
       ctx.fillRect(x, y, cellSize, cellSize - 40);
-      ctx.fillStyle = "red";
-      ctx.fillText("Not Found", x + cellSize/2, y + cellSize/2);
+      ctx.fillStyle = "white";
+      ctx.font = "16px sans-serif";
+      wrapText(ctx, title, x + cellSize / 2, y + (cellSize - 40) / 2, cellSize - 20, 18);
     }
 
     function loadImage(url) {
@@ -137,6 +136,14 @@
         };
         img.src = url;
       });
+    }
+
+    function shuffleArray(array) {
+      for (let i = array.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [array[i], array[j]] = [array[j], array[i]];
+      }
+      return array;
     }
 
     document.getElementById("download").addEventListener("click", () => {
