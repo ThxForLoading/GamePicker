@@ -12,7 +12,7 @@
 </head>
 <body>
   <h1>Steam Game Collage Generator</h1>
-  <p>Enter up to 25 Steam game titles (one per line):</p>
+  <p>Enter up to 25 Steam game titles or AppIDs (one per line):</p>
   <textarea id="titles"></textarea><br>
   <button id="generate">Generate Collage</button>
   <button id="download">Download PNG</button>
@@ -27,27 +27,44 @@
     const padding = 10;
     ctx.textAlign = "center";
 
-    async function fetchSteamCover(title) {
-      const query = encodeURIComponent(title);
-      const steamUrl = `https://store.steampowered.com/api/storesearch/?term=${query}&l=english&cc=us`;
-      const url = `https://corsproxy.io/?${encodeURIComponent(steamUrl)}`;
-      try {
-        const res = await fetch(url);
-        const data = await res.json();
-        if (data.items && data.items.length > 0) {
-          const game = data.items[0];
-          console.log("Found game:", game.name, game);
-
-          // fallback: header_image -> capsule -> tiny_image
-          let imageUrl = game.header_image || game.capsule || game.tiny_image;
-          if (imageUrl) {
-            imageUrl = `https://corsproxy.io/?${encodeURIComponent(imageUrl)}`;
+    async function fetchSteamCover(input) {
+      input = input.trim();
+      // check if input is a number (AppID)
+      if (/^\d+$/.test(input)) {
+        // fetch by AppID
+        const url = `https://corsproxy.io/?https://store.steampowered.com/api/appdetails?appids=${input}&l=english&cc=us`;
+        try {
+          const res = await fetch(url);
+          const data = await res.json();
+          const gameData = data[input]?.data;
+          if (gameData) {
+            let imageUrl = gameData.header_image || gameData.capsule || gameData.small_capsule || null;
+            if (imageUrl) imageUrl = `https://corsproxy.io/?${encodeURIComponent(imageUrl)}`;
+            return { name: gameData.name, image: imageUrl };
           }
-
-          return { name: game.name, image: imageUrl };
+        } catch (e) {
+          console.error("Fetch by AppID failed:", e);
         }
-      } catch (e) {
-        console.error("Fetch error:", e);
+      } else {
+        // fetch by title search
+        const query = encodeURIComponent(input);
+        const steamUrl = `https://store.steampowered.com/api/storesearch/?term=${query}&l=english&cc=us`;
+        const url = `https://corsproxy.io/?${encodeURIComponent(steamUrl)}`;
+        try {
+          const res = await fetch(url);
+          const data = await res.json();
+          if (data.items && data.items.length > 0) {
+            // try exact or substring match
+            let game = data.items.find(g => g.name.toLowerCase() === input.toLowerCase()) || 
+                       data.items.find(g => g.name.toLowerCase().includes(input.toLowerCase())) ||
+                       data.items[0];
+            let imageUrl = game.header_image || game.capsule || game.tiny_image || null;
+            if (imageUrl) imageUrl = `https://corsproxy.io/?${encodeURIComponent(imageUrl)}`;
+            return { name: game.name, image: imageUrl };
+          }
+        } catch (e) {
+          console.error("Fetch by title failed:", e);
+        }
       }
       return null;
     }
@@ -56,14 +73,14 @@
       ctx.fillStyle = "black";
       ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-      let titles = document.getElementById("titles").value
+      let inputs = document.getElementById("titles").value
         .split("\n").map(t => t.trim()).filter(Boolean).slice(0, 25);
 
-      // shuffle titles for random collage
-      titles = shuffleArray(titles);
+      // shuffle for random collage
+      inputs = shuffleArray(inputs);
 
-      for (let i = 0; i < titles.length; i++) {
-        const game = await fetchSteamCover(titles[i]);
+      for (let i = 0; i < inputs.length; i++) {
+        const game = await fetchSteamCover(inputs[i]);
         const x = (i % cols) * cellSize;
         const y = Math.floor(i / cols) * cellSize;
 
@@ -77,7 +94,7 @@
             drawPlaceholder(x, y, game.name); // show game name if image fails
           }
         } else {
-          drawPlaceholder(x, y, titles[i]); // show input title if API returned nothing
+          drawPlaceholder(x, y, inputs[i]); // show input if API returned nothing
         }
       }
     });
@@ -118,8 +135,8 @@
       ctx.fillStyle = "#444";
       ctx.fillRect(x, y, cellSize, cellSize - 40);
       ctx.fillStyle = "white";
-      ctx.font = "16px sans-serif";
-      wrapText(ctx, title, x + cellSize / 2, y + (cellSize - 40) / 2, cellSize - 20, 18);
+      ctx.font = "32px sans-serif";
+      wrapText(ctx, title, x + cellSize / 2, y + (cellSize - 40) / 2, cellSize - 20, 25);
     }
 
     function loadImage(url) {
