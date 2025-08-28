@@ -29,9 +29,7 @@
 
     async function fetchSteamCover(input) {
       input = input.trim();
-      // check if input is a number (AppID)
       if (/^\d+$/.test(input)) {
-        // fetch by AppID
         const url = `https://corsproxy.io/?https://store.steampowered.com/api/appdetails?appids=${input}&l=english&cc=us`;
         try {
           const res = await fetch(url);
@@ -46,7 +44,6 @@
           console.error("Fetch by AppID failed:", e);
         }
       } else {
-        // fetch by title search
         const query = encodeURIComponent(input);
         const steamUrl = `https://store.steampowered.com/api/storesearch/?term=${query}&l=english&cc=us`;
         const url = `https://corsproxy.io/?${encodeURIComponent(steamUrl)}`;
@@ -54,7 +51,6 @@
           const res = await fetch(url);
           const data = await res.json();
           if (data.items && data.items.length > 0) {
-            // try exact or substring match
             let game = data.items.find(g => g.name.toLowerCase() === input.toLowerCase()) || 
                        data.items.find(g => g.name.toLowerCase().includes(input.toLowerCase())) ||
                        data.items[0];
@@ -76,7 +72,6 @@
       let inputs = document.getElementById("titles").value
         .split("\n").map(t => t.trim()).filter(Boolean).slice(0, 25);
 
-      // shuffle for random collage
       inputs = shuffleArray(inputs);
 
       for (let i = 0; i < inputs.length; i++) {
@@ -91,10 +86,10 @@
             drawTitle(game.name, x, y, cellSize, cellSize);
           } catch (err) {
             console.error("Image load failed:", game.image);
-            drawPlaceholder(x, y, game.name); // show game name if image fails
+            drawPlaceholder(x, y, game.name);
           }
         } else {
-          drawPlaceholder(x, y, inputs[i]); // show input if API returned nothing
+          drawPlaceholder(x, y, inputs[i]);
         }
       }
     });
